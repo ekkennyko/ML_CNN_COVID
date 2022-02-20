@@ -1,160 +1,168 @@
-import glob
 import numpy as np
-import os
-import matplotlib.pyplot as plt
 import pandas as pd
-import sklearn.metrics as metrics
+
+import matplotlib.pyplot as plt
 import seaborn as sns
-from keras.callbacks import ModelCheckpoint, EarlyStopping
-from keras.layers import BatchNormalization, Conv2D, MaxPool2D, Dropout, Flatten, Dense
-from keras.models import Sequential
-from keras.utils.np_utils import to_categorical
-from sklearn.metrics import classification_report, roc_curve, auc
-from sklearn.model_selection import cross_val_score
+sns.set_style('darkgrid')
+
+import os
+import random
+import keras
+
+import warnings
+warnings.filterwarnings('ignore')
+
 from sklearn.model_selection import train_test_split
+
+from keras.preprocessing.image import load_img
+from keras.preprocessing.image import img_to_array
 from keras.preprocessing.image import ImageDataGenerator
-from keras.preprocessing import image
-from keras.preprocessing.image import load_img, img_to_array
-from sklearn.preprocessing import label_binarize
-from tensorflow import keras
 
-img_size = (224,224)
+from keras.layers import Dense, Flatten, AveragePooling2D, Dropout
+from keras.optimizers import adam_v2
+from keras.applications.vgg16 import VGG16
+from keras.models import Model
 
-dir_name = 'COVID-19_Radiography_Dataset/COVID'
-img_list = glob.glob(dir_name + '/*')
-list_covid = []
-for img in img_list:
-    temp_img = load_img(img,grayscale=True,target_size=(img_size))
-    temp_img_array = img_to_array(temp_img) /255
-    list_covid.append(temp_img_array)
-list_covid = np.array(list_covid)
-list_covid2 = list_covid.reshape(-1,50176)
-df_covid=pd.DataFrame(list_covid2)
-df_covid['label'] = np.full(df_covid.shape[0],2)
-print(df_covid.shape)
+c = 'COVID-19_Radiography_Dataset/COVID'
+n = 'COVID-19_Radiography_Dataset/Normal'
+p = 'COVID-19_Radiography_Dataset/Viral Pneumonia'
 
-dir_name2 = 'COVID-19_Radiography_Dataset/Normal'
-img_list2 = glob.glob(dir_name2 + '/*')
-list_normal = []
-for img in img_list2:
-    temp_img = load_img(img,grayscale=True,target_size=(img_size))
-    temp_img_array = img_to_array(temp_img) /255
-    list_normal.append(temp_img_array)
-list_normal = np.array(list_normal)
-list_normal2 = list_normal.reshape(-1,50176)
-df_normal=pd.DataFrame(list_normal2)
-df_normal['label'] = np.full(df_normal.shape[0],0)
-print(df_normal.shape)
+random.seed(42)
+filenames = os.listdir(c) + random.sample(os.listdir(n), 5000) + os.listdir(p)
 
+categories = []
+for filename in filenames:
+    category = filename.split('-')[0]
+    if category == 'COVID':
+        categories.append(str(2))
+    elif category == 'Viral Pneumonia':
+        categories.append(str(1))
+    else:
+        categories.append(str(0))
 
-dir_name3 = 'COVID-19_Radiography_Dataset/Viral Pneumonia'
-img_list3 = glob.glob(dir_name3 + '/*')
-list_others = []
-for img in img_list3:
-    temp_img = load_img(img,grayscale=True,target_size=(img_size))
-    temp_img_array = img_to_array(temp_img) /255
-    list_others.append(temp_img_array)
-list_others = np.array(list_others)
-list_others2 = list_others.reshape(-1,50176)
-df_others=pd.DataFrame(list_others2)
-df_others['label'] = np.full(df_others.shape[0],1)
-print(df_others.shape)
+for i in range(len(filenames)):
+    if 'COVID' in filenames[i]:
+        filenames[i] = os.path.join(c, filenames[i])
+    elif 'Viral Pneumonia' in filenames[i]:
+        filenames[i] = os.path.join(p, filenames[i])
+    else:
+        filenames[i] = os.path.join(n, filenames[i])
 
-Df = pd.concat([df_covid, df_normal, df_others], ignore_index=True)
-x_train, x_test, y_train, y_test = train_test_split(Df.iloc[:,0:-1], Df.iloc[:,-1], test_size=0.20, random_state=None)
+df = pd.DataFrame({
+    'filename': filenames,
+    'category': categories
+})
 
-X_train = x_train.values.reshape(-1,224,224,1)
-X_test = x_test.values.reshape(-1,224,224,1)
-Y_train = keras.utils.to_categorical(y_train)
-Y_test = keras.utils.to_categorical(y_test)
+print(df.head)
 
-model = Sequential()
-model.add(BatchNormalization(input_shape=(224,224,1)))
-model.add(Conv2D(64, kernel_size=(3,3), padding='same', activation='relu'))
-model.add(MaxPool2D(pool_size=(2,2)))
-model.add(Conv2D(64, kernel_size=(3,3), padding='same', activation='relu'))
-model.add(MaxPool2D(pool_size=(2,2)))
-model.add(Dropout(0.35))
-
-model.add(Conv2D(32, kernel_size=(3,3), activation='relu'))
-model.add(MaxPool2D(pool_size=(2,2)))
-model.add(Dropout(0.35))
-
-model.add(Flatten())
-model.add(Dense(128, activation='relu'))
-model.add(Dropout(0.35))
-model.add(Dense(3, activation='softmax'))
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-
-model.summary()
-
-model_chkpt = ModelCheckpoint('model.h5', monitor='accuracy')
-early_stopping = EarlyStopping(monitor='loss', restore_best_weights=False,patience=10)
-history = model.fit(X_train, Y_train, validation_split=0.20, epochs=20, batch_size=32, shuffle=True, callbacks=[model_chkpt, early_stopping])
-
-f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 10))
-t = f.suptitle('Fast-CovNet Performance', fontsize=16,fontweight='bold')
-f.subplots_adjust(top=0.9, wspace=0.1)
-
-max_epoch = len(history.history['accuracy'])+1
-epoch_list = list(range(1,max_epoch))
-ax1.plot(epoch_list, history.history['accuracy'], label='Train Accuracy')
-ax1.plot(epoch_list, history.history['val_accuracy'], label='Validation Accuracy')
-ax1.set_xticks(np.arange(1, max_epoch, 1))
-ax1.set_ylabel('Accuracy Value',fontsize=14,fontweight='bold')
-ax1.set_xlabel('Epoch',fontsize=14,fontweight='bold')
-ax1.set_title('Accuracy', fontsize=14,fontweight='bold')
-l1 = ax1.legend(loc="best")
-
-ax2.plot(epoch_list, history.history['loss'], label='Train Loss')
-ax2.plot(epoch_list, history.history['val_loss'], label='Validation Loss')
-ax2.set_xticks(np.arange(1, max_epoch, 1))
-ax2.set_ylabel('Loss Value',fontsize=14,fontweight='bold')
-ax2.set_xlabel('Epoch',fontsize=14,fontweight='bold')
-ax2.set_title('Loss',fontsize=14,fontweight='bold')
-l2 = ax2.legend(loc="best")
-plt.figure()
-ax = plt.subplot()
-
-ax.set_title('Confusion Matrix')
-pred = model.predict_classes(X_test)
-Y_TEST = np.argmax(Y_test, axis =1)
-cm = metrics.confusion_matrix(Y_TEST,pred)
-classes=['normal', 'other pneumonia', 'covid19']
-sns.heatmap(cm, annot=True,xticklabels=classes, yticklabels=classes,cmap='Blues')
-
-plt.xlabel('Predicted')
-plt.ylabel('Actual')
-plt.show
-print(classification_report(Y_TEST, pred, digits = 5))
-print('normal = 0 , other pneumonia = 1, covid = 2')
-
-#f = plt.subplots(figsize=(5, 5))
-PRED = to_categorical(pred)
-y = Df['label'].values
-# Binarize the output
-y = label_binarize(y, classes=[0,1,2])
-n_classes = y.shape[1]
-
-fpr = dict()
-tpr = dict()
-roc_auc = dict()
-for i in range(n_classes):
-       fpr[i], tpr[i], _ = roc_curve(Y_test[:,i], PRED[:,i])
-       roc_auc[i] = auc(fpr[i], tpr[i])
-       colors = ['blue', 'red', 'green']
-cls = {0:'normal', 1:'other pneumonia', 2:'covid'}
-for i, color ,c in zip(range(n_classes), colors, cls.values()):
-    plt.plot(fpr[i], tpr[i], color=color, lw=0.5,
-             label='ROC curve of '+c+ '(AUC = {1:0.2f})'
-             ''.format(i, roc_auc[i]))
-plt.plot([0, 1], [0, 1], 'k--',linestyle='--')
-plt.xlim([-0.05, 1.0])
-plt.ylim([0.0, 1.05])
-plt.xlabel('False Positive Rate')
-plt.ylabel('True Positive Rate')
-plt.title('ROC for multi-class data')
-plt.legend(loc="lower right")
+plt.figure(figsize=(12,3))
+splot = sns.countplot(data = df.sort_values(by='category'), y ='category', palette='cool', saturation=0.9)
+plt.bar_label(container=splot.containers[0],
+              labels=['Normal', 'Viral Pneumonia', 'COVID'],
+              label_type='center', size=15, color='w')
 plt.show()
 
-model.save('MODEL_COVID19')
+sample = random.choice(df['filename'])
+image = load_img(sample)
+plt.imshow(image)
+plt.show()
+
+train_data, test_valid_data = train_test_split(df, test_size=0.2, random_state = 42, shuffle=True, stratify=df['category'])
+train_data = train_data.reset_index(drop=True)
+test_valid_data = test_valid_data.reset_index(drop=True)
+test_data, valid_data = train_test_split(test_valid_data, test_size=0.5, random_state = 42,
+                                         shuffle=True, stratify=test_valid_data['category'])
+test_data = test_data.reset_index(drop=True)
+valid_data = valid_data.reset_index(drop=True)
+train_data_gen = ImageDataGenerator(
+    rotation_range=15,
+    rescale=1./255,
+    shear_range=0.1,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    width_shift_range=0.1,
+    height_shift_range=0.1
+)
+train_generator = train_data_gen.flow_from_dataframe(
+    train_data,
+    x_col='filename',
+    y_col='category',
+    target_size=(224,224),
+    class_mode='categorical',
+    batch_size=15
+)
+valid_data_gen = ImageDataGenerator(rescale=1./255)
+
+valid_generator = valid_data_gen.flow_from_dataframe(
+    valid_data,
+    x_col='filename',
+    y_col='category',
+    target_size=(224,224),
+    class_mode='categorical',
+    batch_size=15
+)
+baseModel = VGG16(input_shape=(224,224,3), weights='imagenet', include_top=False)
+
+for layer in baseModel.layers:
+    layer.trainable = False
+
+headModel = baseModel.output
+headModel = AveragePooling2D()(headModel)
+headModel = Flatten()(headModel)
+headModel = Dense(128, activation="relu")(headModel)
+headModel = Dropout(0.2)(headModel)
+headModel = Dense(3, activation='softmax')(headModel)
+
+model = Model(inputs=baseModel.input, outputs=headModel)
+model.summary()
+
+opt = adam_v2.Adam(learning_rate=0.0001)
+model.compile(optimizer=opt, loss='categorical_crossentropy', metrics=['accuracy'])
+
+epochs = 20
+history = model.fit_generator(train_generator,
+                              validation_data=valid_generator, verbose=1, epochs=epochs)
+model.save('covid.h5')
+
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
+ax1.plot(history.history['loss'], color='b', label="Training loss")
+ax1.plot(history.history['val_loss'], color='r', label="validation loss")
+ax1.set_xticks(np.arange(1, epochs, 1))
+ax1.set_yticks(np.arange(0, 1, 0.1))
+
+ax2.plot(history.history['accuracy'], color='b', label="Training accuracy")
+ax2.plot(history.history['val_accuracy'], color='r',label="Validation accuracy")
+ax2.set_xticks(np.arange(1, epochs, 1))
+
+legend = plt.legend(loc='best', shadow=True)
+plt.tight_layout()
+plt.show()
+
+sample = random.choice(test_data['filename'])
+
+category = sample.split('-')[0]
+true = ''
+if category == 'COVID':
+    true = 'COVID'
+elif category == 'Viral Pneumonia':
+    true = 'Viral Pneumonia'
+else:
+    true = 'Normal'
+
+print(f'True value is : {true}')
+
+image = load_img(sample, target_size=(224, 224))
+img = img_to_array(image)
+img = img.reshape((1, 224, 224, 3))
+
+result = model.predict(img)
+result = np.argmax(result, axis=-1)
+print('Prediction is:')
+if result == 0:
+    print("Normal")
+elif result == 1:
+    print("Viral Pneumonia")
+else:
+    print("COVID +")
+
+plt.imshow(image)
