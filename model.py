@@ -1,27 +1,20 @@
 import numpy as np
 import pandas as pd
-
 import matplotlib.pyplot as plt
 import seaborn as sns
-sns.set_style('darkgrid')
-
 import os
 import random
-import keras
-
 import warnings
-warnings.filterwarnings('ignore')
-
 from sklearn.model_selection import train_test_split
-
 from keras.preprocessing.image import load_img
-from keras.preprocessing.image import img_to_array
 from keras.preprocessing.image import ImageDataGenerator
-
 from keras.layers import Dense, Flatten, AveragePooling2D, Dropout
 from keras.optimizers import adam_v2
 from keras.applications.vgg16 import VGG16
 from keras.models import Model
+
+warnings.filterwarnings('ignore')
+sns.set_style('darkgrid')
 
 c = 'COVID-19_Radiography_Dataset/COVID'
 n = 'COVID-19_Radiography_Dataset/Normal'
@@ -55,8 +48,8 @@ df = pd.DataFrame({
 
 print(df.head)
 
-plt.figure(figsize=(12,3))
-splot = sns.countplot(data = df.sort_values(by='category'), y ='category', palette='cool', saturation=0.9)
+plt.figure(figsize=(12, 3))
+splot = sns.countplot(data=df.sort_values(by='category'), y='category', palette='cool', saturation=0.9)
 plt.bar_label(container=splot.containers[0],
               labels=['Normal', 'Viral Pneumonia', 'COVID'],
               label_type='center', size=15, color='w')
@@ -67,16 +60,17 @@ image = load_img(sample)
 plt.imshow(image)
 plt.show()
 
-train_data, test_valid_data = train_test_split(df, test_size=0.2, random_state = 42, shuffle=True, stratify=df['category'])
+train_data, test_valid_data = train_test_split(df, test_size=0.2, random_state=42, shuffle=True,
+                                               stratify=df['category'])
 train_data = train_data.reset_index(drop=True)
 test_valid_data = test_valid_data.reset_index(drop=True)
-test_data, valid_data = train_test_split(test_valid_data, test_size=0.5, random_state = 42,
+test_data, valid_data = train_test_split(test_valid_data, test_size=0.5, random_state=42,
                                          shuffle=True, stratify=test_valid_data['category'])
 test_data = test_data.reset_index(drop=True)
 valid_data = valid_data.reset_index(drop=True)
 train_data_gen = ImageDataGenerator(
     rotation_range=15,
-    rescale=1./255,
+    rescale=1. / 255,
     shear_range=0.1,
     zoom_range=0.2,
     horizontal_flip=True,
@@ -87,21 +81,21 @@ train_generator = train_data_gen.flow_from_dataframe(
     train_data,
     x_col='filename',
     y_col='category',
-    target_size=(224,224),
+    target_size=(224, 224),
     class_mode='categorical',
     batch_size=32
 )
-valid_data_gen = ImageDataGenerator(rescale=1./255)
+valid_data_gen = ImageDataGenerator(rescale=1. / 255)
 
 valid_generator = valid_data_gen.flow_from_dataframe(
     valid_data,
     x_col='filename',
     y_col='category',
-    target_size=(224,224),
+    target_size=(224, 224),
     class_mode='categorical',
     batch_size=32
 )
-baseModel = VGG16(input_shape=(224,224,3), weights='imagenet', include_top=False)
+baseModel = VGG16(input_shape=(224, 224, 3), weights='imagenet', include_top=False)
 
 for layer in baseModel.layers:
     layer.trainable = False
@@ -131,38 +125,9 @@ ax1.set_xticks(np.arange(1, epochs, 1))
 ax1.set_yticks(np.arange(0, 1, 0.1))
 
 ax2.plot(history.history['accuracy'], color='b', label="Training accuracy")
-ax2.plot(history.history['val_accuracy'], color='r',label="Validation accuracy")
+ax2.plot(history.history['val_accuracy'], color='r', label="Validation accuracy")
 ax2.set_xticks(np.arange(1, epochs, 1))
 
 legend = plt.legend(loc='best', shadow=True)
 plt.tight_layout()
 plt.show()
-
-sample = random.choice(test_data['filename'])
-
-category = sample.split('-')[0]
-true = ''
-if category == 'COVID':
-    true = 'COVID'
-elif category == 'Viral Pneumonia':
-    true = 'Viral Pneumonia'
-else:
-    true = 'Normal'
-
-print(f'True value is : {true}')
-
-image = load_img(sample, target_size=(224, 224))
-img = img_to_array(image)
-img = img.reshape((1, 224, 224, 3))
-
-result = model.predict(img)
-result = np.argmax(result, axis=-1)
-print('Prediction is:')
-if result == 0:
-    print("Normal")
-elif result == 1:
-    print("Viral Pneumonia")
-else:
-    print("COVID")
-
-plt.imshow(image)
