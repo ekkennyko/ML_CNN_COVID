@@ -28,8 +28,8 @@ n = 'COVID-19_Radiography_Dataset/Normal'
 p = 'COVID-19_Radiography_Dataset/Viral Pneumonia'
 
 random.seed(42)
-filenames = os.listdir(c) + random.sample(os.listdir(n), 5000) + os.listdir(p)
-
+filenames = random.sample(os.listdir(c), 500) + random.sample(os.listdir(n), 500) + random.sample(os.listdir(p), 500)
+print(filenames)
 categories = []
 for filename in filenames:
     category = filename.split('-')[0]
@@ -89,7 +89,7 @@ train_generator = train_data_gen.flow_from_dataframe(
     y_col='category',
     target_size=(224,224),
     class_mode='categorical',
-    batch_size=15
+    batch_size=32
 )
 valid_data_gen = ImageDataGenerator(rescale=1./255)
 
@@ -99,7 +99,7 @@ valid_generator = valid_data_gen.flow_from_dataframe(
     y_col='category',
     target_size=(224,224),
     class_mode='categorical',
-    batch_size=15
+    batch_size=32
 )
 baseModel = VGG16(input_shape=(224,224,3), weights='imagenet', include_top=False)
 
@@ -119,7 +119,7 @@ model.summary()
 opt = adam_v2.Adam(learning_rate=0.0001)
 model.compile(optimizer=opt, loss='categorical_crossentropy', metrics=['accuracy'])
 
-epochs = 20
+epochs = 50
 history = model.fit_generator(train_generator,
                               validation_data=valid_generator, verbose=1, epochs=epochs)
 model.save('covid.h5')
@@ -163,6 +163,6 @@ if result == 0:
 elif result == 1:
     print("Viral Pneumonia")
 else:
-    print("COVID +")
+    print("COVID")
 
 plt.imshow(image)
